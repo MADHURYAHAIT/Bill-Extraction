@@ -1,41 +1,76 @@
-import cv2
+import os
+
 import numpy as np
+import google.generativeai as genai
 
-# Step 1: Load the image
-image_path = 'images/page_1.png'  # Change this to your image path
-image = cv2.imread(image_path)
 
-# Step 2: Convert to grayscale
-gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+from dotenv import load_dotenv
+load_dotenv()
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# Step 3: Apply adaptive thresholding
-thresh = cv2.adaptiveThreshold(gray, 255, 
-                               cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                               cv2.THRESH_BINARY_INV, 
-                               11, 2)
 
-# Step 4: Apply morphological operations to close gaps
-kernel = np.ones((10, 10), np.uint8)
-morph = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=5)
+def input_image_setup(file_location, type='image/png'):
+    if file_location:
+        with open(file_location, 'rb') as f:
+                bytes_data = f.read()
+        print("Data Extraction Started..")
+        image_parts = [
+                {
+                    "mime_type": type,  
+                    "data": bytes_data
+                }
+            ]
 
-# Step 5: Find contours
-contours, _ = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        input_prompt="""
+                You are an expert in scanned images of invoices. There would be more than once invoice in the provided image. 
+                Your job is to identify the number of invoices. create a bounding box around the invoice such once bounding box consists of one invoice and get the the coordinates of the bounding box if 
+                the full canvas coordinates are left = 0 , top = 0 , right= 2448, bottom=3168. 
+                The coordinates of the each of the invoices are needed so that they can be cropped as individual invoices.
+                
+                Format should not be changed anyhow.
+                The identified invoices are = number
+                Invoice 1
+                [left coordinate, top coordinate, right coordinate, bottom coordinate]
+                Invoice 2
+                [left coordinate, top coordinate, right coordinate, bottom coordinate]
+                so on...
+            """
 
-# Step 6: Draw bounding boxes around each contour
-for contour in contours:
-    area = cv2.contourArea(contour)
-    x, y, w, h = cv2.boundingRect(contour)
-    aspect_ratio = float(w)/h
-    # Filter contours based on area and aspect ratio (change the thresholds as needed)
-    if area > 10000 and 0.5 < aspect_ratio < 5:  # Adjust these values based on your image
-        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Green color, thickness 2
+        generation_config = {
+            "temperature": 0.1,
+            "top_p": 1,
+            "top_k": 1,
+            "max_output_tokens": 2048,
+            }
+        model=genai.GenerativeModel('gemini-1.5-flash',generation_config=generation_config)
+        response=model.generate_content([input_prompt,image_parts[0]])
+        # print(response.text)
+        print("Data Extracted Successfully!")
+        return response.text
 
-# Step 7: Resize the image for display
-width = 800  # Desired width
-height = int(image.shape[0] * (width / image.shape[1]))  # Maintain aspect ratio
-resized_image = cv2.resize(image, (width, height))
 
-# Step 8: Display the result
-cv2.imshow('Bounding Boxes', resized_image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+
+def process(list_a):
+    print("Data Processing...")
+    Data=[]
+    columns=[]
+    columns.append(list_a[0][1:4])
+    for i in range(1,len(list_a)):
+        Data.append(list_a[i][1:4])
+    d = np.array(Data)
+    return d,columns
+
+
+
+if __name__ == "__main__":
+    # if len(sys.argv)!= 2:
+    #     print("Usage: python script.py <file_location>")
+    #     sys.exit(1)
+    file_location = "images\page_1.png"
+    Raw=input_image_setup(file_location)
+    print(Raw)
+    # Raw = Raw.replace("\t", "").replace(" ", "")
+    # list_a = ast.literal_eval(Raw)
+    # d,c = process(list_a)
+    # data_to_xlsx(d, c[0], "output/output.xlsx")
+    print("Script Success !")

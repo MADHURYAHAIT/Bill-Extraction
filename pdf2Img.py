@@ -1,41 +1,45 @@
-import cv2
-import numpy as np
+import fitz
+import os
 
-# Step 1: Load the image
-image_path = 'images/page_1.png'  # Change this to your image path
-image = cv2.imread(image_path)
 
-# Step 2: Convert to grayscale
-gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-# Step 3: Apply adaptive thresholding
-thresh = cv2.adaptiveThreshold(gray, 255, 
-                               cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                               cv2.THRESH_BINARY_INV, 
-                               11, 2)
+# Define a function to convert PDF to images
+def pdf_to_Img(foldername, location):
+    image_folder = foldername
+    if not os.path.exists(image_folder):
+        os.makedirs(image_folder)
 
-# Step 4: Apply morphological operations to close gaps
-kernel = np.ones((20, 20), np.uint8)  # Increased kernel size
-morph = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=3)  # Reduced iterations
+    # Open the PDF file
+    try:
+        doc = fitz.open(location)
 
-# Step 5: Find contours
-contours, _ = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    except Exception as e:
+        return
 
-# Step 6: Draw bounding boxes around each contour
-for contour in contours:
-    area = cv2.contourArea(contour)
-    x, y, w, h = cv2.boundingRect(contour)
-    aspect_ratio = float(w)/h
-    # Filter contours based on area and aspect ratio
-    if area > 5000 and 0.5 < aspect_ratio < 5:  # Adjust these values based on your image
-        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Green color, thickness 2
+    # Iterate over each page
+    for page_num in range(len(doc)):
+        page = doc[page_num]
 
-# Step 7: Resize the image for display
-width = 800  # Desired width
-height = int(image.shape[0] * (width / image.shape[1]))  # Maintain aspect ratio
-resized_image = cv2.resize(image, (width, height))
+        zoom_matrix = fitz.Matrix(4, 4)  # 4x4 matrix, scales up by 3 in both x and y directions
+        # Render the page to an image
+        try:
+            image = page.get_pixmap(matrix=zoom_matrix)
+           
+        except Exception as e:
+         
+            continue
 
-# Step 8: Display the result
-cv2.imshow('Bounding Boxes', resized_image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+        # Save the image to a file in the image folder
+        try:
+            image.save(os.path.join(image_folder, f'page_{page_num+2}.png'))
+            
+        except Exception as e:
+         
+            continue
+
+    doc.close()
+    print("Done")
+    
+image_folder = 'images'
+output_folder='pdf/pdf2.pdf'
+pdf_to_Img(image_folder, output_folder)
